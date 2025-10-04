@@ -33,32 +33,37 @@ const encrypt = (text) => {
   let encrypted = cipher.update(stringifiedText, 'utf8', 'hex');
   encrypted += cipher.final('hex');
   const tag = cipher.getAuthTag();
+  // Ensure all parts are hex encoded for consistent parsing
   return `${iv.toString('hex')}:${encrypted}:${tag.toString('hex')}`;
 };
 
 /**
  * Decrypts sensitive data encrypted with AES-256-GCM.
  * @param {string} encryptedText - The encrypted data string.
- * @returns {string} - The decrypted data.
+ * @returns {string | null} - The decrypted data, or null if decryption fails.
  */
 const decrypt = (encryptedText) => {
   if (encryptedText === null || encryptedText === undefined) return encryptedText;
   const parts = encryptedText.split(':');
   if (parts.length !== 3) {
-    logger.error('Invalid encrypted data format.');
-    return ''; // Or throw an error, depending on desired behavior
+    logger.error('Invalid encrypted data format. Expected format: iv:encrypted:tag');
+    return null; // Return null to indicate failure
   }
-  const iv = Buffer.from(parts[0], 'hex');
-  const decipher = crypto.createDecipheriv(algorithm, Buffer.from(secretKey), iv);
-  const encrypted = Buffer.from(parts[1], 'hex');
-  const tag = Buffer.from(parts[2], 'hex');
-  decipher.setAuthTag(tag);
-  let decrypted = decipher.update(encrypted, 'hex', 'utf8');
-  decrypted += decipher.final('utf8');
-  return decrypted;
+  try {
+    const iv = Buffer.from(parts[0], 'hex');
+    const decipher = crypto.createDecipheriv(algorithm, Buffer.from(secretKey), iv);
+    const encrypted = Buffer.from(parts[1], 'hex');
+    const tag = Buffer.from(parts[2], 'hex');
+    decipher.setAuthTag(tag);
+    let decrypted = decipher.update(encrypted, 'hex', 'utf8');
+    decrypted += decipher.final('utf8');
+    return decrypted;
+  } catch (error) {
+    logger.error({ error, encryptedText }, 'Decryption failed.');
+    return null; // Return null on decryption error
+  }
 };
 
 module.exports = {
   encrypt,
-  decrypt,
-};
+  decrypt};
