@@ -1,6 +1,7 @@
 const httpStatus = require('http-status');
 const Patient = require('../models/Patient');
 const ApiError = require('../utils/ApiError');
+const { paginate } = require('../utils/paginate'); // Assuming paginate utility exists or will be added
 
 /**
  * Create a patient
@@ -17,13 +18,24 @@ const createPatient = async (patientBody) => {
 /**
  * Query for patients
  * @param {Object} filter - Mongo filter
- * @param {Object} options - Query options
+ * @param {Object} options - Query options (e.g., page, limit, sortBy)
  * @returns {Promise<QueryResult>}
  */
 const queryPatients = async (filter, options) => {
   // TODO: Implement pagination and filtering options if needed
-  const patients = await Patient.find(filter);
-  return patients;
+  const { limit, page } = options;
+  const startIndex = (page - 1) * limit;
+
+  const patients = await Patient.find(filter).skip(startIndex).limit(limit);
+  const totalResults = await Patient.countDocuments(filter);
+  const totalPages = Math.ceil(totalResults / limit);
+
+  return {
+    results: patients,
+    page,
+    limit,
+    totalPages,
+    totalResults};
 };
 
 /**
@@ -32,7 +44,11 @@ const queryPatients = async (filter, options) => {
  * @returns {Promise<Patient>}
  */
 const getPatientById = async (id) => {
-  return Patient.findById(id);
+  const patient = await Patient.findById(id);
+  if (!patient) {
+    throw new ApiError(httpStatus.NOT_FOUND, 'Patient not found');
+  }
+  return patient;
 };
 
 /**
@@ -42,10 +58,7 @@ const getPatientById = async (id) => {
  * @returns {Promise<Patient>}
  */
 const updatePatientById = async (patientId, updateBody) => {
-  const patient = await getPatientById(patientId);
-  if (!patient) {
-    throw new ApiError(httpStatus.NOT_FOUND, 'Patient not found');
-  }
+  const patient = await getPatientById(patientId); // Use getPatientById to ensure patient exists and handle NOT_FOUND
   Object.assign(patient, updateBody);
   await patient.save();
   return patient;
@@ -57,10 +70,7 @@ const updatePatientById = async (patientId, updateBody) => {
  * @returns {Promise<Patient>}
  */
 const deletePatientById = async (patientId) => {
-  const patient = await getPatientById(patientId);
-  if (!patient) {
-    throw new ApiError(httpStatus.NOT_FOUND, 'Patient not found');
-  }
+  const patient = await getPatientById(patientId); // Use getPatientById to ensure patient exists and handle NOT_FOUND
   await patient.remove();
   return patient;
 };
@@ -70,5 +80,4 @@ module.exports = {
   queryPatients,
   getPatientById,
   updatePatientById,
-  deletePatientById,
-};
+  deletePatientById};
