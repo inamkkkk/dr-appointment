@@ -4,36 +4,28 @@ const appointmentSchema = new mongoose.Schema({
   doctor_id: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Doctor',
-    required: true,
-  },
+    required: true},
   patient_id: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Patient',
-    required: true,
-  },
+    required: true},
   slot_time: {
     type: Date,
-    required: true,
-  },
+    required: true},
   end_time: {
     type: Date, // Automatically calculated based on doctor's slot interval
-    required: true,
-  },
+    required: true},
   status: {
     type: String,
     enum: ['pending', 'confirmed', 'cancelled', 'completed', 'no-show'],
-    default: 'pending',
-  },
+    default: 'pending'},
   source: {
     type: String,
     enum: ['whatsapp', 'web', 'admin'],
-    default: 'whatsapp',
-  },
+    default: 'whatsapp'},
   notes: {
     type: String,
-    trim: true,
-  },
-},
+    trim: true}},
 { timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' } }
 );
 
