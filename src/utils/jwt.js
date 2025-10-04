@@ -33,8 +33,7 @@ const saveToken = async (token, userId, expires, type, blacklisted = false) => {
     user: userId,
     expires: expires.toDate(),
     type,
-    blacklisted,
-  });
+    blacklisted});
   return tokenDoc;
 };
 
@@ -59,23 +58,20 @@ const verifyToken = async (token, type) => {
  * @returns {Promise<Object>}
  */
 const generateAuthTokens = async (user) => {
-  const accessTokenExpires = moment().add(process.env.JWT_ACCESS_EXPIRATION_MINUTES, 'minutes');
+  const accessTokenExpires = moment().add(config.jwt.accessExpirationMinutes, 'minutes');
   const accessToken = generateToken(user.id, accessTokenExpires, 'access');
 
-  const refreshTokenExpires = moment().add(process.env.JWT_REFRESH_EXPIRATION_DAYS, 'days');
+  const refreshTokenExpires = moment().add(config.jwt.refreshExpirationDays, 'days');
   const refreshToken = generateToken(user.id, refreshTokenExpires, 'refresh');
   await saveToken(refreshToken, user.id, refreshTokenExpires, 'refresh');
 
   return {
     access: {
       token: accessToken,
-      expires: accessTokenExpires.toDate(),
-    },
+      expires: accessTokenExpires.toDate()},
     refresh: {
       token: refreshToken,
-      expires: refreshTokenExpires.toDate(),
-    },
-  };
+      expires: refreshTokenExpires.toDate()}};
 };
 
 // Token model (for refreshing tokens), assuming it exists
@@ -94,5 +90,4 @@ module.exports = {
   generateToken,
   saveToken,
   verifyToken,
-  generateAuthTokens,
-};
+  generateAuthTokens};
