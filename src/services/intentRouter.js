@@ -52,19 +52,35 @@ const getIntentAndEntities = async (messageText) => {
   // Fallback to LLM for ambiguous intents or if local model fails to classify with high confidence
   if (confidence < 0.7) {
     logger.info(`Low confidence for intent: ${intent} (${confidence}). Falling back to LLM for classification.`);
-    // In a production system, you'd send a more structured prompt to LLM for classification
-    // For this skeleton, we'll simulate a generic fallback or let LLM service handle direct reply.
-    // A real LLM call here would be to classify, not to generate a reply.
-    // For now, we'll keep the intent as 'unknown' if low confidence and let the main handler decide.
-    // Alternatively, LLM could refine entities or suggest a better intent.
-    // const llmClassification = await generateReply(`Classify the intent of: "${messageText}"`, { context: 'intent_classification' });
-    // if (llmClassification && llmClassification.includes('booking')) intent = 'booking'; // Example
+    // In a real-world scenario, you'd make a call to an LLM service to classify the intent and extract entities.
+    // For this example, we'll simulate that by calling generateReply with a specific prompt.
+    try {
+      const llmResponse = await generateReply(`Analyze the following user message and return a JSON object with 'intent', 'entities', and 'confidence'.
+        User message: "${messageText}"
+        Example output format: {"intent": "some_intent", "entities": {"key": "value"}, "confidence": 0.9}
+        Possible intents: greeting, booking, cancel_booking, check_availability, medical_advice, get_patient_history, unknown.
+        For booking, extract 'date', 'time', 'doctor'. For cancel_booking, extract 'appointmentId'. For check_availability, extract 'doctor', 'date'.
+        If you are unsure or the intent is not among the provided ones, use 'unknown' intent.
+        `, { context: 'intent_classification' });
+
+      const parsedResponse = JSON.parse(llmResponse);
+      if (parsedResponse && parsedResponse.intent) {
+        intent = parsedResponse.intent;
+        entities = parsedResponse.entities || {};
+        confidence = parsedResponse.confidence || 0.5;
+        logger.info(`LLM classification: Intent: ${intent}, Entities: ${JSON.stringify(entities)}, Confidence: ${confidence}`);
+      } else {
+        logger.warn(`LLM failed to provide a valid intent classification for message: "${messageText}"`);
+      }
+    } catch (error) {
+      logger.error(`Error during LLM intent classification: ${error.message}`);
+      // If LLM classification fails, stick with the current best guess or 'unknown'
+    }
   }
 
-  logger.info(`Intent identified: ${intent}, Entities: ${JSON.stringify(entities)}, Confidence: ${confidence}`);
+  logger.info(`Final Intent identified: ${intent}, Entities: ${JSON.stringify(entities)}, Confidence: ${confidence}`);
   return { intent, entities, confidence };
 };
 
 module.exports = {
-  getIntentAndEntities,
-};
+  getIntentAndEntities};
