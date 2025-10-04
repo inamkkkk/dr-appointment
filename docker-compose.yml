@@ -1,0 +1,55 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      MONGO_URI: mongodb://mongo:27017/whatsapp_doctor_bot
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      QUEUE_REDIS_HOST: redis
+      QUEUE_REDIS_PORT: 6379
+      # Add other environment variables from .env.example here or use an .env file
+      # Example:
+      # JWT_SECRET: supersecretjwtkeythatshouldbemorecomplex
+      # LLM_API_KEY: YOUR_GEMINI_OR_OPENAI_API_KEY
+      # ENCRYPTION_KEY: Your32ByteSecretKeyForPIIEncryption!
+    depends_on:
+      - mongo
+      - redis
+    volumes:
+      # Persist whatsapp-web.js session data
+      - ./whatsapp-session:/app/.wwebjs_auth
+    networks:
+      - bot-network
+
+  mongo:
+    image: mongo:6.0
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+    networks:
+      - bot-network
+
+  redis:
+    image: redis:7.0-alpine
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-data:/data
+    networks:
+      - bot-network
+
+volumes:
+  mongo-data:
+  redis-data:
+
+networks:
+  bot-network:
+    driver: bridge
