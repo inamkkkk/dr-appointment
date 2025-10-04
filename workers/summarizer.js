@@ -3,6 +3,7 @@ const { summarizeText } = require('../src/services/llmService');
 const Message = require('../src/models/Message');
 const ConversationSummary = require('../src/models/ConversationSummary');
 const pino = require('pino');
+const { vectorMemoryHub } = require('../src/utils/vectorMemoryHub'); // Assuming vectorMemoryHub is in this path
 
 const logger = pino({
   transport: {
@@ -16,13 +17,12 @@ const logger = pino({
 
 const connection = {
   host: process.env.QUEUE_REDIS_HOST || 'localhost',
-  port: parseInt(process.env.QUEUE_REDIS_PORT || '6379', 10),
-};
+  port: parseInt(process.env.QUEUE_REDIS_PORT || '6379', 10)};
 
 const summarizerWorker = new Worker(
   'summarizerQueue',
   async (job) => {
-    const { conversationId, latestMessageTimestamp } = job.data;
+    const { conversationId, latestMessageTimestamp, patientId } = job.data; // Added patientId to job data
     logger.info(`Processing summarization job for conversation: ${conversationId}`);
 
     try {
@@ -30,8 +30,7 @@ const summarizerWorker = new Worker(
       const recentMessages = await Message.find({
         conversation_id: conversationId,
         // Only summarize messages after the last summary or a certain threshold
-        timestamp: { $gt: latestMessageTimestamp || new Date(0) },
-      })
+        timestamp: { $gt: latestMessageTimestamp || new Date(0) }})
         .sort({ timestamp: 1 })
         .limit(50); // Limit to a reasonable number of messages for summarization
 
@@ -45,9 +44,9 @@ const summarizerWorker = new Worker(
       const summary = await summarizeText(conversationText);
       const keyPoints = summary.split('. ').filter(Boolean).map(s => s.trim()); // Basic key point extraction
 
-      // TODO: Generate embedding for the summary and store in Vector Memory Hub (e.g., Qdrant)
-      // const embedding = await vectorMemoryHub.generateEmbedding(summary);
-      const embeddingRef = `embedding_ref_${Date.now()}`; // Placeholder
+      // Generate embedding for the summary and store in Vector Memory Hub (e.g., Qdrant)
+      const embedding = await vectorMemoryHub.generateEmbedding(summary);
+      const embeddingRef = await vectorMemoryHub.storeEmbedding(embedding, { conversationId: conversationId, patientId: patientId }); // Store embedding and get reference
 
       await ConversationSummary.findOneAndUpdate(
         { conversation_id: conversationId },
@@ -56,7 +55,7 @@ const summarizerWorker = new Worker(
           key_points: keyPoints,
           embedding_ref: embeddingRef,
           last_updated: new Date(),
-          // TODO: link patient_id if identified
+          patient_id: patientId, // Link patient_id if identified
         },
         { upsert: true, new: true }
       );
