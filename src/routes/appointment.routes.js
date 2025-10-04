@@ -13,6 +13,8 @@ router
 
 router
   .route('/:id')
-  .patch(auth('manageAppointments'), validate(appointmentValidation.updateAppointment), appointmentController.updateAppointment);
+  .get(auth('getAppointments'), appointmentController.getAppointmentById) // Added GET by ID
+  .patch(auth('manageAppointments'), validate(appointmentValidation.updateAppointment), appointmentController.updateAppointment)
+  .delete(auth('manageAppointments'), appointmentController.deleteAppointment); // Added DELETE
 
 module.exports = router;
