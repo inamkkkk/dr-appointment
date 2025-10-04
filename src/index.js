@@ -69,17 +69,25 @@ app.use(errorHandler);
 
 const PORT = process.env.PORT || 3000;
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   logger.info(`Server running on port ${PORT}`);
   logger.info(`Environment: ${process.env.NODE_ENV}`);
 });
 
 // Graceful shutdown
 const exitHandler = () => {
-  if (app) {
-    app.close(() => {
+  if (server) {
+    server.close(() => {
       logger.info('Server closed');
-      process.exit(1);
+      // Close other resources like queues and Redis client here if necessary
+      // For example:
+      // summarizerQueue.close();
+      // reminderQueue.close();
+      // sessionRefreshQueue.close();
+      redisClient.quit(() => {
+        logger.info('Redis client disconnected');
+        process.exit(1);
+      });
     });
   } else {
     process.exit(1);
@@ -96,7 +104,5 @@ process.on('unhandledRejection', unexpectedErrorHandler);
 
 process.on('SIGTERM', () => {
   logger.info('SIGTERM received');
-  if (app) {
-    app.close();
-  }
+  exitHandler();
 });
