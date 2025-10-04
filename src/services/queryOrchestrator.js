@@ -53,8 +53,7 @@ const getAvailableSlots = async (doctorId, date) => {
       doctor_id: doctorId,
       slot_time: {
         $gte: moment(date).startOf('day').toDate(),
-        $lt: moment(date).endOf('day').toDate(),
-      },
+        $lt: moment(date).endOf('day').toDate()},
       status: { $in: ['pending', 'confirmed'] }, // Consider pending and confirmed as taken
     });
 
@@ -78,6 +77,11 @@ const createAppointment = async (payload) => {
   try {
     const { doctor_id, patient_id, slot_time, source } = payload;
 
+    // TODO: Add input validation for payload fields
+    if (!doctor_id || !patient_id || !slot_time) {
+      throw new ApiError(400, 'Missing required fields: doctor_id, patient_id, slot_time');
+    }
+
     const doctor = await Doctor.findById(doctor_id);
     if (!doctor) throw new ApiError(404, 'Doctor not found');
 
@@ -95,7 +99,11 @@ const createAppointment = async (payload) => {
 
     const targetDay = appointmentMoment.format('dddd');
     const doctorAvailability = doctor.availability_slots.find(slot => slot.dayOfWeek === targetDay);
-    const interval = doctorAvailability ? doctorAvailability.interval : 30;
+    // TODO: Handle case where doctorAvailability is not found but getAvailableSlots returned something (should not happen with current logic, but good practice)
+    if (!doctorAvailability) {
+      throw new ApiError(400, 'Doctor does not have availability configured for this day.');
+    }
+    const interval = doctorAvailability.interval || 30;
     const end_time = appointmentMoment.clone().add(interval, 'minutes').toDate();
 
     const newAppointment = await Appointment.create({
@@ -104,8 +112,13 @@ const createAppointment = async (payload) => {
       slot_time: appointmentMoment.toDate(),
       end_time,
       status: 'pending', // Per business rule, create tentative booking
-      source,
-    });
+      source});
+
+    // TODO: Add logic to send confirmation message to patient and doctor, potentially via SMS or WhatsApp integration
+    // Example:
+    // await sendConfirmationMessage(patient.whatsapp_number, doctor.name, newAppointment.slot_time);
+    // await sendConfirmationMessage(doctor.contact_info.whatsapp_number, patient.name, newAppointment.slot_time);
+
 
     return newAppointment;
   } catch (error) {
@@ -121,15 +134,37 @@ const createAppointment = async (payload) => {
  */
 const cancelAppointment = async (appointmentId) => {
   try {
-    const appointment = await Appointment.findByIdAndUpdate(
+    // TODO: Add validation to ensure the appointment is cancellable (e.g., not too close to the slot time)
+    const appointment = await Appointment.findById(appointmentId);
+    if (!appointment) {
+      throw new ApiError(404, 'Appointment not found');
+    }
+
+    // Example of a simple cancellation policy: cannot cancel within 24 hours of the appointment
+    const now = moment();
+    const appointmentTime = moment(appointment.slot_time);
+    const hoursUntilAppointment = appointmentTime.diff(now, 'hours');
+
+    if (hoursUntilAppointment < 24 && appointment.status !== 'cancelled') {
+      throw new ApiError(400, 'Appointments cannot be cancelled within 24 hours of the slot time.');
+    }
+
+
+    const updatedAppointment = await Appointment.findByIdAndUpdate(
       appointmentId,
       { status: 'cancelled' },
       { new: true }
     );
-    if (!appointment) {
-      throw new ApiError(404, 'Appointment not found');
-    }
-    return appointment;
+    // The check for !appointment above covers this, but for clarity:
+    // if (!updatedAppointment) {
+    //   throw new ApiError(404, 'Appointment not found');
+    // }
+
+    // TODO: Add logic to notify patient and doctor about the cancellation
+    // Example:
+    // await sendCancellationNotification(appointment.patient_id, appointment.doctor_id);
+
+    return updatedAppointment;
   } catch (error) {
     logger.error('Error in cancelAppointment:', error);
     throw error;
@@ -149,7 +184,8 @@ const getPatientHistory = async (patientId) => {
     }
 
     const appointments = await Appointment.find({ patient_id: patientId }).populate('doctor_id', 'name specialization').sort({ slot_time: -1 });
-    const messages = await Message.find({ from: patient.whatsapp_number }).sort({ timestamp: -1 }).limit(50); // Get recent 50 messages
+    // TODO: Ensure message retrieval logic is robust. Consider pagination for a large number of messages.
+    const messages = await Message.find({ $or: [{ from: patient.whatsapp_number }, { to: patient.whatsapp_number }] }).sort({ timestamp: -1 }).limit(50); // Get recent 50 messages from/to the patient
 
     return { appointments, messages };
   } catch (error) {
@@ -162,5 +198,4 @@ module.exports = {
   getAvailableSlots,
   createAppointment,
   cancelAppointment,
-  getPatientHistory,
-};
+  getPatientHistory};
