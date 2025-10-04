@@ -23,8 +23,12 @@ router.post('/whatsapp', async (req, res) => {
   // For whatsapp-web.js, messages are handled in whatsappService.js's client.on('message')
   // This endpoint would be used if a proxy forwards messages from a whatsapp-web.js instance
   // or for the WhatsApp Business API webhook if implemented here.
-  logger.info('Received a WhatsApp webhook event (placeholder).');
+  logger.info('Received a WhatsApp webhook event.');
+
   // TODO: Validate webhook request signature/token
+  // For now, we'll just log and process if the body seems to contain messages.
+  // In a production environment, implementing signature validation is crucial.
+
   if (req.body.entry && req.body.entry[0] && req.body.entry[0].changes && req.body.entry[0].changes[0] && req.body.entry[0].changes[0].value.messages) {
     const messages = req.body.entry[0].changes[0].value.messages;
     for (const message of messages) {
@@ -37,7 +41,7 @@ router.post('/whatsapp', async (req, res) => {
         timestamp: message.timestamp,
         // Add other relevant fields if needed
       };
-      // await handleIncomingMessage(simplifiedMessage);
+      // await handleIncomingMessage(simplifiedMessage); // Uncomment to process
       logger.info('Processing incoming Business API message (disabled for now, handled by whatsapp-web.js client.on)');
     }
   } else {
@@ -46,7 +50,7 @@ router.post('/whatsapp', async (req, res) => {
     logger.info('Generic webhook received:', req.body);
     if (req.body.message && req.body.message.from) {
       // Assuming a format similar to whatsapp-web.js 'message' event
-      // await handleIncomingMessage(req.body.message);
+      // await handleIncomingMessage(req.body.message); // Uncomment to process
       logger.info('Processing incoming whatsapp-web.js style message (disabled for now, handled by client.on)');
     }
   }
