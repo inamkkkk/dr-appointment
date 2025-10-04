@@ -13,6 +13,11 @@ const logger = pino({
 
 const connectDB = async () => {
   try {
+    // TODO: Ensure process.env.MONGO_URI is defined and log a warning if it's missing.
+    if (!process.env.MONGO_URI) {
+      logger.warn('MONGO_URI is not defined. MongoDB connection might fail.');
+    }
+
     await mongoose.connect(process.env.MONGO_URI, {
       useNewUrlParser: true,
       useUnifiedTopology: true
