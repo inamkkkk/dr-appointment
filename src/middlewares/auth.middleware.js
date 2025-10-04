@@ -2,7 +2,7 @@ const passport = require('passport'); // Placeholder, actual JWT strategy would 
 const httpStatus = require('http-status');
 const ApiError = require('../utils/ApiError');
 const jwt = require('jsonwebtoken');
-const pino = require('pino');
+const pino = require('loggers'); // Corrected import path for logger
 
 const logger = pino({
   transport: {
@@ -23,6 +23,7 @@ const auth = (requiredRights = []) => (req, res, next) => {
     // Extract token from header
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      // TODO: Consider adding more specific error messages or logging for malformed headers.
       return reject(new ApiError(httpStatus.UNAUTHORIZED, 'Authentication token missing or malformed'));
     }
     const token = authHeader.split(' ')[1];
@@ -31,23 +32,47 @@ const auth = (requiredRights = []) => (req, res, next) => {
       const payload = jwt.verify(token, process.env.JWT_SECRET);
       req.user = payload; // Attach user payload to request
 
+      // TODO: Implement a more robust and flexible role/permission system.
+      // The current implementation is a simplified example.
+      // Consider using a library like 'casl' for comprehensive access control.
       if (requiredRights.length) {
-        // Basic role check example. In a real app, 'rights' would be granular permissions.
-        // For this skeleton, we'll check `user.role` against hardcoded roles.
-        let hasRequiredRight = false;
-        if (requiredRights.includes('getDoctors') || requiredRights.includes('getDoctor') || requiredRights.includes('getAppointments') || requiredRights.includes('getContext') || requiredRights.includes('getPatientHistory')) {
-          // All authenticated users can read their own or public data
-          hasRequiredRight = true; // Simplified: any authenticated can view many things
-        }
-        if (requiredRights.includes('manageDoctors') || requiredRights.includes('manageAppointments') || requiredRights.includes('managePatients') || requiredRights.includes('updateContext')) {
-          // Only 'admin' or the doctor themselves can manage certain things
-          if (req.user.role === 'admin' || (req.user.role === 'doctor' && req.user.id === req.params.id)) {
-            hasRequiredRight = true;
+        let userHasPermission = false;
+
+        // Check if any of the required rights match the user's roles or explicitly granted permissions
+        for (const right of requiredRights) {
+          if (req.user.permissions && req.user.permissions.includes(right)) {
+            userHasPermission = true;
+            break;
+          }
+          // Simplified role check: if the required right is a role, check if user has it.
+          // This might need to be more granular in a real application.
+          if (right === req.user.role) {
+            userHasPermission = true;
+            break;
           }
         }
 
-        if (!hasRequiredRight && !requiredRights.includes(req.user.role)) { // Fallback to direct role match
-          return reject(new ApiError(httpStatus.FORBIDDEN, 'Forbidden'));
+        // Special case: if the user is an admin, they should have access to most things
+        if (req.user.role === 'admin') {
+          userHasPermission = true;
+        }
+
+        // Specific check for managing doctors/appointments/patients if required
+        if (requiredRights.some(r => ['manageDoctors', 'manageAppointments', 'managePatients'].includes(r))) {
+          if (req.user.role === 'admin') {
+            userHasPermission = true;
+          }
+          // Allow doctor to manage their own appointments if the specific ID matches.
+          // This logic is very specific and might need generalization.
+          else if (req.user.role === 'doctor' && req.params && req.params.id && req.user.id === req.params.id) {
+            userHasPermission = true;
+          }
+        }
+
+
+        if (!userHasPermission) {
+          logger.warn(`User ${req.user.id} (${req.user.role}) attempted to access route requiring rights: ${requiredRights.join(', ')}`);
+          return reject(new ApiError(httpStatus.FORBIDDEN, 'Forbidden: Insufficient permissions'));
         }
 
         resolve();
@@ -56,7 +81,11 @@ const auth = (requiredRights = []) => (req, res, next) => {
       }
     } catch (error) {
       logger.error('JWT authentication error:', error.message);
-      return reject(new ApiError(httpStatus.UNAUTHORIZED, 'Invalid or expired token'));
+      // TODO: Differentiate between expired token and other JWT verification errors.
+      if (error.name === 'TokenExpiredError') {
+        return reject(new ApiError(httpStatus.UNAUTHORIZED, 'Token expired'));
+      }
+      return reject(new ApiError(httpStatus.UNAUTHORIZED, 'Invalid token'));
     }
   })
     .then(() => next())
