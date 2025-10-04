@@ -16,12 +16,14 @@ const logger = pino({
 
 const createPatient = catchAsync(async (req, res) => {
   logger.info('Creating new patient.');
+  // TODO: Implement input validation for patient creation
   const patient = await patientService.createPatient(req.body);
   res.status(httpStatus.CREATED).send(patient);
 });
 
 const getPatient = catchAsync(async (req, res) => {
   logger.info('Fetching patient by ID:', req.params.id);
+  // TODO: Add validation for req.params.id format
   const patient = await patientService.getPatientById(req.params.id);
   if (!patient) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Patient not found');
@@ -31,6 +33,7 @@ const getPatient = catchAsync(async (req, res) => {
 
 const getPatientHistory = catchAsync(async (req, res) => {
   logger.info('Fetching patient history for ID:', req.params.id);
+  // TODO: Add validation for req.params.id format
   const history = await queryOrchestrator.getPatientHistory(req.params.id);
   if (!history) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Patient history not found or patient does not exist');
@@ -41,5 +44,4 @@ const getPatientHistory = catchAsync(async (req, res) => {
 module.exports = {
   createPatient,
   getPatient,
-  getPatientHistory,
-};
+  getPatientHistory};
