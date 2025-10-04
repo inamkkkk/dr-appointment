@@ -31,16 +31,23 @@ const generateReply = async (prompt, context = {}, isMedicalAdviceQuery = false)
   }
 
   // TODO: Add more sophisticated prompt engineering with context
-  const fullPrompt = `You are a helpful AI assistant for a doctor's office. Your goal is to assist patients with appointments and general information, but *never* provide medical advice. If asked for medical advice, gently redirect them to book an appointment. Provide concise and clear answers.
+  // For now, a basic prompt that includes context and user input.
+  // More advanced techniques might involve few-shot examples, persona definition, and clearer role boundaries.
+  const systemInstruction = `You are a helpful AI assistant for a doctor's office named "MediBot". Your primary goal is to assist patients with scheduling appointments, answering general questions about the clinic, and providing information on services. You must *never* provide medical advice, diagnoses, or treatment recommendations. If a user asks for medical advice, you must gently redirect them to book an appointment with a doctor. Be polite, concise, and clear in your responses.
 
-Context: ${JSON.stringify(context)}
-User: ${prompt}
-AI: `;
+Here's some context about the current conversation and the patient:
+${JSON.stringify(context, null, 2)}
+`;
+
+  const userMessage = `Patient: ${prompt}`;
 
   try {
-    const result = await model.generateContent(fullPrompt);
-    const response = await result.response;
-    let text = response.text();
+    const result = await model.generateContentStream([systemInstruction, userMessage]);
+    let text = '';
+    for await (const chunk of result.stream) {
+      const chunkText = chunk.text();
+      text += chunkText;
+    }
 
     // Post-processing to enforce medical advice policy, just in case LLM generates it.
     // This is a last resort check and should ideally be handled by prompt engineering/safety settings.
@@ -49,9 +56,14 @@ AI: `;
       text = MEDICAL_ADVICE_POLICY_RESPONSE;
     }
 
-    return text;
+    // Further sanitization: remove any traces of profanity or inappropriate content if the model were to generate it.
+    // For this example, we'll assume the LLM's safety settings are sufficient or rely on external content filtering if needed.
+    // A more robust solution might involve a separate content moderation API.
+
+    return text.trim(); // Trim whitespace from the final response
   } catch (error) {
     logger.error('Error generating LLM reply:', error);
+    // Provide a user-friendly error message without exposing internal details.
     return 'I apologize, but I am currently unable to process your request. Please try again later.';
   }
 };
@@ -64,9 +76,9 @@ AI: `;
 const summarizeText = async (text) => {
   // TODO: Implement actual summarization logic.
   // This would typically involve a dedicated summarization prompt.
-  const prompt = `Please provide a concise summary of the following conversation/text:
+  const prompt = `Please provide a concise and neutral summary of the following text, focusing on the key points:
 
-${text}
+"${text}"
 
 Summary:`;
   try {
@@ -87,9 +99,11 @@ Summary:`;
  */
 const translateText = async (text, targetLanguage) => {
   // TODO: Implement actual translation logic.
+  // Ensure targetLanguage is a valid language code that the LLM understands.
+  // A robust implementation might include a lookup or validation for targetLanguage.
   const prompt = `Translate the following text into ${targetLanguage}:
 
-${text}
+"${text}"
 
 Translation:`;
   try {
@@ -97,7 +111,7 @@ Translation:`;
     const response = await result.response;
     return response.text();
   } catch (error) {
-    logger.error('Error translating text with LLM:', error);
+    logger.error(`Error translating text to ${targetLanguage} with LLM:`, error);
     return 'Unable to translate text.';
   }
 };
@@ -105,5 +119,4 @@ Translation:`;
 module.exports = {
   generateReply,
   summarizeText,
-  translateText,
-};
+  translateText};
