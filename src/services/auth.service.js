@@ -10,6 +10,11 @@ const { comparePassword } = require('../utils/password');
  * @returns {Promise<Doctor>}
  */
 const loginDoctorWithEmailAndPassword = async (email, password) => {
+  // TODO: Add input validation for email and password
+  if (!email || !password) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Email and password are required');
+  }
+
   const doctor = await Doctor.findOne({ email });
   if (!doctor || !(await comparePassword(password, doctor.password))) {
     throw new ApiError(httpStatus.UNAUTHORIZED, 'Incorrect email or password');
@@ -18,5 +23,4 @@ const loginDoctorWithEmailAndPassword = async (email, password) => {
 };
 
 module.exports = {
-  loginDoctorWithEmailAndPassword,
-};
+  loginDoctorWithEmailAndPassword};
