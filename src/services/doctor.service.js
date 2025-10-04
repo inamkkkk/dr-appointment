@@ -21,11 +21,17 @@ const createDoctor = async (doctorBody) => {
  * Query for doctors
  * @param {Object} filter - Mongo filter
  * @param {Object} options - Query options
+ * @param {string} [options.sortBy] - Sort option in the format: property (e.g. name)
+ * @param {number} [options.limit] - Max number of results per page (default: 10)
+ * @param {number} [options.page] - Current page of results (default: 1)
  * @returns {Promise<QueryResult>}
  */
 const queryDoctors = async (filter, options) => {
   // TODO: Implement pagination and filtering options if needed
-  const doctors = await Doctor.find(filter).select('-password'); // Exclude password from query results
+  const { sortBy, limit = 10, page = 1 } = options;
+  const sort = sortBy ? `-${sortBy}` : '-createdAt'; // Default sort by creation date
+
+  const doctors = await Doctor.paginate(filter, { page, limit, sortBy: sort });
   return doctors;
 };
 
@@ -89,11 +95,18 @@ Doctor.schema.statics.isEmailTaken = async function (email, excludeDoctorId) {
   return !!doctor;
 };
 
+// Add pagination plugin to Doctor schema if not already present
+// Assuming you have a plugin like 'mongoose-paginate-v2' installed and configured
+if (!Doctor.schema.plugin) {
+  const mongoosePaginate = require('mongoose-paginate-v2');
+  Doctor.schema.plugin(mongoosePaginate);
+}
+
+
 module.exports = {
   createDoctor,
   queryDoctors,
   getDoctorById,
   getDoctorByEmail,
   updateDoctorById,
-  deleteDoctorById,
-};
+  deleteDoctorById};
