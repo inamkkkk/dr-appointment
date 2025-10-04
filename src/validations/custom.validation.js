@@ -17,7 +17,10 @@ const password = (value, helpers) => {
   return value;
 };
 
+// TODO: Implement any additional custom validation logic here.
+// For example, you might add validations for specific types of data
+// or business rules that cannot be expressed with standard Joi types.
+
 module.exports = {
   objectId,
-  password,
-};
+  password};
