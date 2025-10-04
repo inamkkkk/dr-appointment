@@ -13,7 +13,7 @@ services:
       REDIS_PORT: 6379
       QUEUE_REDIS_HOST: redis
       QUEUE_REDIS_PORT: 6379
-      # Add other environment variables from .env.example here or use an .env file
+      # TODO: Add other environment variables from .env.example here or use an .env file
       # Example:
       # JWT_SECRET: supersecretjwtkeythatshouldbemorecomplex
       # LLM_API_KEY: YOUR_GEMINI_OR_OPENAI_API_KEY
