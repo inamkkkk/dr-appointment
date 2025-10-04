@@ -5,22 +5,19 @@ const patientSchema = new mongoose.Schema({
   name: {
     type: String,
     required: true,
-    trim: true,
-  },
+    trim: true},
   phone: {
     type: String,
     required: true,
     trim: true,
     set: encrypt,
-    get: decrypt,
-  },
+    get: decrypt},
   whatsapp_number: {
     type: String,
     required: true,
     trim: true,
     set: encrypt,
-    get: decrypt,
-  },
+    get: decrypt},
   email: {
     type: String,
     trim: true,
@@ -31,26 +28,22 @@ const patientSchema = new mongoose.Schema({
       if (value && !value.match(/^\S+@\S+\.\S+$/)) {
         throw new Error('Invalid email');
       }
-    },
-  },
+    }},
   dob: {
     type: Date,
     set: encrypt,
-    get: decrypt,
-  },
+    get: decrypt},
   gender: {
     type: String,
     enum: ['male', 'female', 'other'],
     set: encrypt,
-    get: decrypt,
-  },
+    get: decrypt},
   reminder_prefs: {
     viaWhatsapp: { type: Boolean, default: true },
     viaSMS: { type: Boolean, default: false },
     viaEmail: { type: Boolean, default: false },
     preferredTime: { type: String, default: '09:00' }, // e.g., 'HH:MM'
-  },
-},
+  }},
 { timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' } }
 );
 
