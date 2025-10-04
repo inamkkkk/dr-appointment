@@ -6,6 +6,7 @@ const { patientValidation } = require('../validations');
 
 const router = express.Router();
 
+// TODO: Add more routes for patient management, e.g., getPatientById, updatePatient, deletePatient, getPatientsList
 router.post('/', auth('managePatients'), validate(patientValidation.createPatient), patientController.createPatient);
 router.get('/:id/history', auth('getPatientHistory'), validate(patientValidation.getPatientHistory), patientController.getPatientHistory);
 
