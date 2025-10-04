@@ -8,8 +8,7 @@ const authLimiter = rateLimit({
   skipSuccessfulRequests: true,
   handler: (req, res, next) => {
     next(new ApiError(httpStatus.TOO_MANY_REQUESTS, 'Too many authentication attempts, please try again after 15 minutes'));
-  },
-});
+  }});
 
 const llmRateLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour
@@ -20,11 +19,10 @@ const llmRateLimiter = rateLimit({
     return req.user ? req.user.id : req.ip; // Assuming req.user is populated by auth middleware
   },
   handler: (req, res, next) => {
+    // TODO: Implement specific LLM rate limit error message if needed, otherwise reuse generic.
     next(new ApiError(httpStatus.TOO_MANY_REQUESTS, 'Too many LLM requests, please try again later. (Max 20 messages/hour)'));
-  },
-});
+  }});
 
 module.exports = {
   authLimiter,
-  llmRateLimiter,
-};
+  llmRateLimiter};
