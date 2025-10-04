@@ -4,6 +4,7 @@ const { getIntentAndEntities } = require('./intentRouter');
 const { getSession, updateSession } = require('./contextEngine');
 const { generateReply } = require('./llmService');
 const Message = require('../models/Message');
+const axios = require('axios'); // Added for Business API integration
 
 const logger = pino({
   transport: {
@@ -21,9 +22,59 @@ const whatsappBusinessApi = {
     // TODO: Implement actual WhatsApp Business API integration
     logger.info(`Sending message via Business API to ${to}: ${message} (Template: ${templateName}, Vars: ${JSON.stringify(variables)})`);
     // Example: Axios.post(process.env.WHATSAPP_BUSINESS_API_URL, { ... })
-    return { success: true, messageId: 'business_api_msg_id' };
-  },
-};
+
+    // **Refinement**: Added basic example for Business API integration.
+    // This part needs to be configured with your actual API endpoint and credentials.
+    const WHATSAPP_API_URL = process.env.WHATSAPP_BUSINESS_API_URL; // e.g., 'https://graph.facebook.com/v18.0/YOUR_PHONE_NUMBER_ID/messages'
+    const WHATSAPP_API_TOKEN = process.env.WHATSAPP_BUSINESS_API_TOKEN; // Your access token
+
+    if (!WHATSAPP_API_URL || !WHATSAPP_API_TOKEN) {
+      logger.error('WhatsApp Business API URL or Token not configured.');
+      return { success: false, message: 'WhatsApp Business API not configured.' };
+    }
+
+    try {
+      let payload;
+      if (templateName) {
+        // Sending a template message
+        payload = {
+          messaging_product: 'whatsapp',
+          to: to,
+          type: 'template',
+          template: {
+            name: templateName,
+            language: { code: 'en' }, // Assuming English, adjust if needed
+            components: [{
+              type: 'body',
+              parameters: Object.entries(variables).map(([key, value]) => ({ type: 'text', text: String(value) }))
+            }]
+          }
+        };
+      } else {
+        // Sending a text message
+        payload = {
+          messaging_product: 'whatsapp',
+          to: to,
+          type: 'text',
+          text: { body: message }
+        };
+      }
+
+      const response = await axios.post(WHATSAPP_API_URL, payload, {
+        headers: {
+          'Authorization': `Bearer ${WHATSAPP_API_TOKEN}`,
+          'Content-Type': 'application/json'}});
+
+      logger.info(`WhatsApp Business API response: ${JSON.stringify(response.data)}`);
+      // Assuming the API returns a success status and a message ID
+      const messageId = response.data?.messages?.[0]?.id;
+      return { success: true, messageId: messageId || 'N/A', method: 'business_api' };
+
+    } catch (error) {
+      logger.error(`Error sending message via WhatsApp Business API to ${to}:`, error.response ? error.response.data : error.message);
+      return { success: false, message: error.message, errorDetails: error.response?.data };
+    }
+  }};
 
 /**
  * Initializes the WhatsApp client for whatsapp-web.js.
@@ -33,6 +84,20 @@ const initWhatsappClient = async (sessionId = 'default') => {
   try {
     await client.initialize();
     logger.info('WhatsApp Client initialized successfully.');
+
+    client.on('ready', () => {
+      logger.info('WhatsApp Client is ready!');
+    });
+
+    client.on('auth_failure', msg => {
+      logger.error('AUTHENTICATION FAILURE', msg);
+    });
+
+    client.on('disconnected', (reason) => {
+      logger.warn('Client was logged out', reason);
+      // TODO: Implement re-authentication or cleanup logic
+    });
+
   } catch (error) {
     logger.error('Failed to initialize WhatsApp Client:', error);
     throw error;
@@ -55,7 +120,7 @@ const sendMessage = async (chatId, message, options = {}) => {
       await client.sendSeen(chatId);
       await client.sendPresence('typing', chatId);
       await new Promise(resolve => setTimeout(resolve, Math.random() * 2000 + 500)); // 0.5 to 2.5 seconds delay
-      await client.sendMessage(chatId, message);
+      const sentMessage = await client.sendMessage(chatId, message);
       logger.info(`Message sent to ${chatId} via whatsapp-web.js: ${message}`);
       await Message.create({
         conversation_id: chatId,
@@ -64,8 +129,9 @@ const sendMessage = async (chatId, message, options = {}) => {
         text: message,
         timestamp: new Date(),
         direction: 'outgoing',
+        message_id: sentMessage.id, // Store message ID from web.js
       });
-      return { success: true, method: 'web.js' };
+      return { success: true, method: 'web.js', messageId: sentMessage.id };
     } catch (error) {
       logger.error(`Error sending message via whatsapp-web.js to ${chatId}:`, error);
       logger.warn('Falling back to WhatsApp Business API.');
@@ -93,15 +159,27 @@ const handleIncomingMessage = async (message) => {
 
   try {
     // 1. Store raw message
-    await Message.create({
+    const incomingMessage = await Message.create({
       conversation_id: conversationId,
       from: message.from,
       to: message.to,
       text: message.body,
       timestamp: new Date(message.timestamp * 1000),
       direction: 'incoming',
-      // attachments: message.hasMedia ? [{ type: message.type, url: 'TODO: get media url' }] : [],
-    });
+      message_id: message.id, // Store message ID from webhook
+      // attachments: message.hasMedia ? [{ type: message.type, url: 'TODO: get media url' }] : []});
+
+    // TODO: Handle media messages properly. Extracting URLs and saving them.
+    if (message.hasMedia) {
+      logger.info(`Received media message of type: ${message.type}`);
+      // Example: Get media and save it. This requires more specific logic based on media type.
+      // const media = await message.downloadMedia();
+      // if (media) {
+      //   incomingMessage.attachments = [{ type: message.type, url: media.source, filename: media.filename }];
+      //   await incomingMessage.save();
+      // }
+    }
+
 
     // 2. Intent Routing
     const { intent, entities, confidence } = await getIntentAndEntities(message.body);
@@ -109,7 +187,12 @@ const handleIncomingMessage = async (message) => {
 
     // 3. Context Engine: Retrieve and update session
     const session = await getSession(conversationId);
-    await updateSession(conversationId, { lastIntent: intent, last5Messages: (session?.last5Messages || []).concat(message.body).slice(-5) });
+    const updatedSessionData = {
+      lastIntent: intent,
+      last5Messages: (session?.last5Messages || []).concat({ role: 'user', content: message.body }).slice(-5),
+      // TODO: Potentially enrich session with entities detected
+    };
+    await updateSession(conversationId, updatedSessionData);
 
     // 4. Query Orchestrator / LLM Layer
     let reply = 'I am sorry, I did not understand that. Can you please rephrase?';
@@ -121,18 +204,21 @@ const handleIncomingMessage = async (message) => {
         break;
       case 'booking':
         // TODO: Orchestrate with QueryOrchestrator, LLM for slot suggestions
+        // For now, a static reply as per TODO.
         reply = 'I can help you book an appointment. What day and time are you looking for?';
         break;
       case 'cancel_booking':
         // TODO: Orchestrate with QueryOrchestrator
+        // For now, a static reply as per TODO.
         reply = 'To cancel an appointment, I\'ll need your appointment ID. Can you provide it?';
         break;
       case 'check_availability':
         // TODO: Orchestrate with QueryOrchestrator
+        // For now, a static reply as per TODO.
         reply = 'Sure, for which doctor and date would you like to check availability?';
         break;
       case 'medical_advice':
-        reply = generateReply(message.body, session, true); // Force medical advice policy
+        reply = await generateReply(message.body, { ...session, ...updatedSessionData }, true); // Force medical advice policy
         usedLLM = true;
         break;
       case 'get_patient_history':
@@ -141,25 +227,39 @@ const handleIncomingMessage = async (message) => {
         break;
       default:
         // Fallback to LLM for general queries or ambiguous intents
-        reply = await generateReply(message.body, session);
+        reply = await generateReply(message.body, { ...session, ...updatedSessionData });
         usedLLM = true;
         break;
     }
 
     // 5. Send reply
-    await sendMessage(conversationId, reply);
+    const sendResult = await sendMessage(conversationId, reply);
+    if (!sendResult.success) {
+      logger.error(`Failed to send reply to ${conversationId}: ${sendResult.message}`);
+      // Optionally, try sending a fallback message if the primary send failed
+      await sendMessage(conversationId, 'I am experiencing an issue right now. Please try again later.');
+    }
 
     // Update message with processed intent and LLM usage
     await Message.findOneAndUpdate(
-      { conversation_id: conversationId, timestamp: new Date(message.timestamp * 1000), text: message.body },
-      { processed_intent: intent, used_llm: usedLLM }
+      { _id: incomingMessage._id }, // Use the _id of the saved incoming message
+      { processed_intent: intent, used_llm: usedLLM, processed_reply: reply, reply_sent: sendResult.success }
     );
 
     // TODO: Trigger Summarizer Worker if conversation has grown
+    // This would involve checking the length/depth of the conversation and potentially calling another service.
+    // Example:
+    // if (session?.messageCount > 10) { // Arbitrary threshold
+    //   // triggerSummarizerWorker(conversationId);
+    // }
 
   } catch (error) {
-    logger.error('Error handling incoming WhatsApp message:', error);
-    await sendMessage(conversationId, 'I am experiencing an issue right now. Please try again later.');
+    logger.error(`Error handling incoming WhatsApp message from ${conversationId}:`, error);
+    try {
+      await sendMessage(conversationId, 'I am experiencing an issue right now. Please try again later.');
+    } catch (sendError) {
+      logger.error(`Failed to send error fallback message to ${conversationId}:`, sendError);
+    }
   }
 };
 
