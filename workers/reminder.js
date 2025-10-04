@@ -19,8 +19,7 @@ const logger = pino({
 
 const connection = {
   host: process.env.QUEUE_REDIS_HOST || 'localhost',
-  port: parseInt(process.env.QUEUE_REDIS_PORT || '6379', 10),
-};
+  port: parseInt(process.env.QUEUE_REDIS_PORT || '6379', 10)};
 
 const reminderWorker = new Worker(
   'reminderQueue',
@@ -46,25 +45,43 @@ const reminderWorker = new Worker(
 
       const appointmentTime = moment(appointment.slot_time).format('MMMM Do YYYY, h:mm a');
       let messageContent = '';
-      let language = 'en'; // Default language
-
       // TODO: Get patient's preferred language from their profile or context
+      const language = patient.preferred_language || 'en'; // Default to 'en' if not specified
 
       // Construct reminder message based on type
       switch (reminderType) {
         case '24_hour_reminder':
+          // Default message
           messageContent = `Reminder: Your appointment with Dr. ${doctor.name} for ${doctor.specialization} is tomorrow at ${appointmentTime}.`;
           // Check if doctor has a specific template for this
-          const doctorTemplate = doctor.templates.find(t => t.name === '24_hour_appointment_reminder' && t.language === language);
-          if (doctorTemplate) {
-            messageContent = doctorTemplate.content.replace('{doctorName}', doctor.name).replace('{specialization}', doctor.specialization).replace('{appointmentTime}', appointmentTime);
+          const doctorTemplate24Hour = doctor.templates.find(t => t.name === '24_hour_appointment_reminder' && t.language === language);
+          if (doctorTemplate24Hour) {
+            messageContent = doctorTemplate24Hour.content
+              .replace('{doctorName}', doctor.name)
+              .replace('{specialization}', doctor.specialization)
+              .replace('{appointmentTime}', appointmentTime);
           }
           break;
         case '1_hour_reminder':
+          // Default message
           messageContent = `Just a friendly reminder: Your appointment with Dr. ${doctor.name} is in 1 hour at ${appointmentTime}.`;
+          // Check if doctor has a specific template for this
+          const doctorTemplate1Hour = doctor.templates.find(t => t.name === '1_hour_appointment_reminder' && t.language === language);
+          if (doctorTemplate1Hour) {
+            messageContent = doctorTemplate1Hour.content
+              .replace('{doctorName}', doctor.name)
+              .replace('{appointmentTime}', appointmentTime);
+          }
           break;
         case 'post_appointment_followup':
+          // Default message
           messageContent = `How was your appointment with Dr. ${doctor.name} today? We appreciate your feedback.`;
+          // Check if doctor has a specific template for this
+          const doctorTemplateFollowup = doctor.templates.find(t => t.name === 'post_appointment_followup' && t.language === language);
+          if (doctorTemplateFollowup) {
+            messageContent = doctorTemplateFollowup.content
+              .replace('{doctorName}', doctor.name);
+          }
           break;
         default:
           logger.warn(`Unknown reminder type: ${reminderType} for appointment ${appointmentId}.`);
@@ -73,11 +90,16 @@ const reminderWorker = new Worker(
 
       // Use LLM for multilingual polish if target language is not English
       if (language !== 'en') {
-        messageContent = await translateText(messageContent, language);
+        try {
+          messageContent = await translateText(messageContent, language);
+        } catch (translationError) {
+          logger.error(`Failed to translate reminder for appointment ${appointmentId} to ${language}:`, translationError);
+          // Continue with the original message if translation fails
+        }
       }
 
       // Send reminder via WhatsApp (primary) or other channels (SMS/Email - TODO)
-      if (patient.reminder_prefs.viaWhatsapp) {
+      if (patient.reminder_prefs?.viaWhatsapp) {
         await sendMessage(patient.whatsapp_number, messageContent);
         logger.info(`Sent WhatsApp reminder to ${patient.whatsapp_number} for appointment ${appointmentId}.`);
       } else {
@@ -85,18 +107,18 @@ const reminderWorker = new Worker(
       }
 
       // TODO: Implement SMS/Email reminders if preferred
-      if (patient.reminder_prefs.viaSMS) {
+      if (patient.reminder_prefs?.viaSMS) {
         // smsService.sendSms(patient.phone, messageContent);
         logger.info(`SMS reminder logic for ${patient.phone} (Not implemented).`);
       }
-      if (patient.reminder_prefs.viaEmail) {
+      if (patient.reminder_prefs?.viaEmail) {
         // emailService.sendEmail(patient.email, 'Appointment Reminder', messageContent);
         logger.info(`Email reminder logic for ${patient.email} (Not implemented).`);
       }
 
     } catch (error) {
-      logger.error(`Error in reminder worker for job ${job.id}:`, error);
-      throw error;
+      logger.error(`Error in reminder worker for job ${job.id} for appointment ${appointmentId}:`, error);
+      throw error; // Re-throw the error to allow BullMQ to handle retries
     }
   },
   { connection }
