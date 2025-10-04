@@ -16,6 +16,7 @@ const logger = pino({
 const errorConverter = (err, req, res, next) => {
   let error = err;
   if (!(error instanceof ApiError)) {
+    // TODO: Add more specific error handling for different Mongoose error types
     const statusCode = error.statusCode || (error instanceof mongoose.Error ? httpStatus.BAD_REQUEST : httpStatus.INTERNAL_SERVER_ERROR);
     const message = error.message || httpStatus[statusCode];
     error = new ApiError(statusCode, message, false, err.stack);
@@ -36,9 +37,9 @@ const errorHandler = (err, req, res, next) => {
   const response = {
     code: statusCode,
     message,
-    ...(process.env.NODE_ENV === 'development' && { stack: err.stack }),
-  };
+    ...(process.env.NODE_ENV === 'development' && { stack: err.stack })};
 
+  // TODO: Log different types of errors with appropriate levels (e.g., warn for specific client errors)
   logger.error(err);
 
   res.status(statusCode).send(response);
@@ -46,5 +47,4 @@ const errorHandler = (err, req, res, next) => {
 
 module.exports = {
   errorConverter,
-  errorHandler,
-};
+  errorHandler};
