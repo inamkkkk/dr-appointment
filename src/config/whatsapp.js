@@ -56,16 +56,32 @@ const createWhatsappClient = (sessionId = 'default') => {
 
   whatsappClient.on('authenticated', (session) => {
     logger.info('WhatsApp Client Authenticated');
+    // TODO: Save session data if needed for persistence or advanced handling
+    // Example: fs.writeFileSync(`./session-${sessionId}.json`, JSON.stringify(session));
   });
 
   whatsappClient.on('auth_failure', (msg) => {
     logger.error('WhatsApp Client Authentication failure', msg);
     // TODO: Handle authentication failure, e.g., restart client or notify admin
+    // Consider re-initializing the client or clearing the session data.
+    // Example:
+    // whatsappClient = null; // Reset client
+    // createWhatsappClient(sessionId); // Attempt to re-create
   });
 
   whatsappClient.on('disconnected', (reason) => {
     logger.warn('WhatsApp Client disconnected:', reason);
     // TODO: Implement re-connection logic or session refresh worker trigger
+    // Example:
+    // if (reason === 'NAVIGATION_FAILURE' || reason === 'PAGE_LOAD_TIMEOUT') {
+    //   logger.info('Attempting to reconnect...');
+    //   setTimeout(() => {
+    //     whatsappClient = null; // Ensure client is reset before re-creation
+    //     createWhatsappClient(sessionId);
+    //   }, 5000); // Wait 5 seconds before attempting reconnect
+    // } else {
+    //   whatsappClient = null; // Reset client on disconnect
+    // }
     whatsappClient = null; // Reset client on disconnect
   });
 
@@ -73,8 +89,26 @@ const createWhatsappClient = (sessionId = 'default') => {
     logger.info(`Message received from ${message.from}: ${message.body}`);
     // TODO: Pass message to Intent Router for processing
     // Example: await handleIncomingMessage(message);
+    // This would typically involve importing and calling a function from another module
+    // const intentRouter = require('../router/intentRouter');
+    // await intentRouter.handleIncomingMessage(message);
   });
 
+  // Optionally, you can add more event listeners for other events like 'change_state', 'message_create', etc.
+  // whatsappClient.on('change_state', (state) => {
+  //   logger.info(`Client state changed: ${state}`);
+  // });
+
+  // whatsappClient.on('message_create', (message) => {
+  //   // Fired whenever a message is created, both sent and received
+  //   if (message.fromMe) {
+  //     logger.info(`Outgoing message created: ${message.body}`);
+  //   } else {
+  //     logger.info(`Incoming message created: ${message.body}`);
+  //   }
+  // });
+
+  logger.info('WhatsApp client creation initiated.');
   return whatsappClient;
 };
 
@@ -88,5 +122,4 @@ const getWhatsappClient = () => {
 
 module.exports = {
   createWhatsappClient,
-  getWhatsappClient,
-};
+  getWhatsappClient};
